@@ -17,21 +17,21 @@ parameters:
 
 resources:
   repositories:
-  - repository: joaooamaral/as-project
+  - repository: joaooamaral/pau-project
     type: github
     endpoint: 'Platform Auto-Updater'
-    name: 'joaooamaral/as-project'
+    name: 'joaooamaral/pau-project'
 
 jobs:
-- job: os_infra_bootup
-  displayName: 'OutSystems Infra bootup'
+- job: pau_project_bootup
+  displayName: 'Platform Auto Updater bootup'
   workspace:
     clean: all
   steps:
 
-  - checkout: OutSystems/opscloud-opscoaching
+  - checkout: joaooamaral/pau-project
     clean: true
-    displayName: 'Checkout Infrastucture Scripts'
+    displayName: 'Checkout Platform Auto Updater'
   
 
   - task: AzureCLI@2
