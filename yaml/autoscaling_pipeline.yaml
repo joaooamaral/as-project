@@ -1,0 +1,94 @@
+---
+trigger: none
+pr: none
+pool: Default
+
+parameters:
+- name: ltVersionToUpdate
+  displayName: LifeTime version to update
+  type: string
+  default: 11.10.8
+- name: psVersionToUpdate
+  displayName: Platform Server version to update
+  type: string
+  default: 11.14.0
+
+
+
+resources:
+  repositories:
+  - repository: joaooamaral/as-project
+    type: github
+    endpoint: 'Platform Auto-Updater'
+    name: 'joaooamaral/as-project'
+
+jobs:
+- job: os_infra_bootup
+  displayName: 'OutSystems Infra bootup'
+  workspace:
+    clean: all
+  steps:
+
+  - checkout: OutSystems/opscloud-opscoaching
+    clean: true
+    displayName: 'Checkout Infrastucture Scripts'
+  
+
+  - task: AzureCLI@2
+    inputs:
+      azureSubscription: 'ospsopscloud'
+      ScriptType: 'ps'
+      scriptLocation: 'InlineScript'
+      inlineScript: 'terraform init'
+      workingDirectory: '$(System.DefaultWorkingDirectory)\terraform\'
+    displayName: 'Init Terraform Script'
+
+
+  - task: TerraformCLI@0
+    inputs:
+      command: 'apply'
+      workingDirectory: '$(System.DefaultWorkingDirectory)\terraform\'
+      environmentServiceName: 'ospsopscloud'
+      commandOptions: '-auto-approve -var="client-name=${{ parameters.clientName }}" -var="location=${{ parameters.resourceRegion }}" -var="coaching-persons=${{ parameters.coachingPersons }}"'
+      allowTelemetryCollection: false
+    displayName: 'Run Terraform Script'
+    
+
+
+  - task: PowerShell@2
+    inputs:
+      targetType: 'inline'
+      script: |
+        if ($${{ parameters.stopVMSchedule }} -ne "NotDefined")
+        {
+          $argument = "-Command `"& 'C:\Scripts\PowerShell\AutoStopVMs.ps1' -RGName '${{ parameters.clientName }}-Coaching'`""
+          $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument
+          $daysOfWeek = "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
+          $trigger = New-ScheduledTaskTrigger -Weekly -At ${{ parameters.stopVMSchedule }} -DaysOfWeek $daysOfWeek
+          $sp = New-ScheduledTaskPrincipal -GroupId "NT AUTHORITY\SYSTEM" -RunLevel Highest
+          $stset = New-ScheduledTaskSettingsSet
+          $st = New-ScheduledTask -Action $action -Trigger $trigger -Principal $sp -Settings $stset
+          Register-ScheduledTask '${{ parameters.clientName }}-Coaching-Stop' -InputObject $st
+        }
+      workingDirectory: '$(System.DefaultWorkingDirectory)\terraform\'
+    displayName: 'Stop VMs Scheduled Task'
+
+
+  - task: PowerShell@2
+    inputs:
+      targetType: 'inline'
+      script: |
+        if ($${{ parameters.startVMSchedule }} -ne "NotDefined")
+        {
+          $argument = "-Command `"& 'C:\Scripts\PowerShell\AutoStartVMs.ps1' -RGName '${{ parameters.clientName }}-Coaching'`""
+          $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $argument
+          $daysOfWeek = "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
+          $trigger = New-ScheduledTaskTrigger -Weekly -At ${{ parameters.startVMSchedule }} -DaysOfWeek $daysOfWeek
+          $sp = New-ScheduledTaskPrincipal -GroupId "NT AUTHORITY\SYSTEM" -RunLevel Highest
+          $stset = New-ScheduledTaskSettingsSet
+          $st = New-ScheduledTask -Action $action -Trigger $trigger -Principal $sp -Settings $stset
+          Register-ScheduledTask '${{ parameters.clientName }}-Coaching-Start' -InputObject $st
+        }
+      workingDirectory: '$(System.DefaultWorkingDirectory)\terraform\'
+    displayName: 'Start VMs Scheduled Task'
+...
